@@ -352,20 +352,20 @@ print("\nCluster Profiles:")
 print(cluster_profile.to_string(index=False))
 
 # %%
-# Good Choices: Underpaid cluster — sort by value ratio (perf / salary), top 4
+# Good Choices: Underpaid cluster — sort by value ratio (perf / salary), top 10
 good_df = merged_data[merged_data['ClusterLabel'] == 'Underpaid'].copy()
 good_df['ValueRatio'] = good_df['PerfScore'] / good_df['Salary']
-good_choices = good_df.nlargest(4, 'ValueRatio')[['Player', 'Salary', 'PTS', 'AST', 'TRB', 'PerfScore', 'ValueRatio']]
+good_choices = good_df.nlargest(10, 'ValueRatio')[['Player', 'Salary', 'PTS', 'AST', 'TRB', 'PerfScore', 'ValueRatio']]
 
-# Not Good Choices: Overpaid cluster — sort by salary per unit performance, top 4
+# Not Good Choices: Overpaid cluster — sort by salary per unit performance, top 10
 bad_df = merged_data[merged_data['ClusterLabel'] == 'Overpaid'].copy()
 bad_df['SalaryPerPerf'] = bad_df['Salary'] / (bad_df['PerfScore'] + 1)  # +1 avoids div-by-zero
-not_good = bad_df.nlargest(4, 'SalaryPerPerf')[['Player', 'Salary', 'PTS', 'AST', 'TRB', 'PerfScore', 'SalaryPerPerf']]
+not_good = bad_df.nlargest(10, 'SalaryPerPerf')[['Player', 'Salary', 'PTS', 'AST', 'TRB', 'PerfScore', 'SalaryPerPerf']]
 
-# Fallback Options: Fair Value cluster — sort by value ratio, top 4
+# Fallback Options: Fair Value cluster — sort by value ratio, top 10
 fallback_df = merged_data[merged_data['ClusterLabel'] == 'Fair Value'].copy()
 fallback_df['ValueRatio'] = fallback_df['PerfScore'] / fallback_df['Salary']
-fallbacks = fallback_df.nlargest(4, 'ValueRatio')[['Player', 'Salary', 'PTS', 'AST', 'TRB', 'PerfScore', 'ValueRatio']]
+fallbacks = fallback_df.nlargest(10, 'ValueRatio')[['Player', 'Salary', 'PTS', 'AST', 'TRB', 'PerfScore', 'ValueRatio']]
 
 # %%
 # Print results
@@ -373,27 +373,50 @@ print("\n" + "="*65)
 print("PLAYER RECOMMENDATIONS FOR THE WIZARDS")
 print("="*65)
 
-print("\n--- GOOD CHOICES (Underpaid / High Value) ---")
+print("\n--- GOOD CHOICES (Underpaid / High Value) — Top 10 ---")
 good_choices['Salary_M'] = (good_choices['Salary'] / 1e6).round(2)
 good_choices['PerfPerM'] = (good_choices['PerfScore'] / (good_choices['Salary'] / 1e6)).round(1)
 print(good_choices[['Player', 'Salary_M', 'PTS', 'AST', 'TRB', 'PerfScore', 'PerfPerM']].to_string(index=False))
 print("  (PerfPerM = performance score per $1M salary — higher is better value)")
 
-print("\n--- NOT GOOD CHOICES (Overpaid / Low Value) ---")
+print("\n--- NOT GOOD CHOICES (Overpaid / Low Value) — Top 10 ---")
 not_good['Salary_M'] = (not_good['Salary'] / 1e6).round(2)
 not_good['PerfPerM'] = (not_good['PerfScore'] / (not_good['Salary'] / 1e6 + 0.001)).round(1)
 print(not_good[['Player', 'Salary_M', 'PTS', 'AST', 'TRB', 'PerfScore', 'PerfPerM']].to_string(index=False))
 print("  (PerfPerM = performance score per $1M salary — lower means worse value)")
 
-print("\n--- FALLBACK OPTIONS (Moderate Value) ---")
+print("\n--- FALLBACK OPTIONS (Moderate Value) — Top 10 ---")
 fallbacks['Salary_M'] = (fallbacks['Salary'] / 1e6).round(2)
 fallbacks['PerfPerM'] = (fallbacks['PerfScore'] / (fallbacks['Salary'] / 1e6)).round(1)
 print(fallbacks[['Player', 'Salary_M', 'PTS', 'AST', 'TRB', 'PerfScore', 'PerfPerM']].to_string(index=False))
 print("  (PerfPerM = performance score per $1M salary)")
 
+# %%
+# Save all players in each cluster to a CSV for full review
+# Each cluster gets its own sheet in an Excel file, and a flat CSV is also saved
+output_cols = ['Player', 'Salary', 'PTS', 'AST', 'TRB', 'PerfScore', 'ClusterLabel']
+
+# Flat CSV: all players with their cluster label, sorted by cluster then value ratio
+all_players_out = merged_data[output_cols].copy()
+all_players_out['Salary_M'] = (all_players_out['Salary'] / 1e6).round(2)
+all_players_out['PerfPerM'] = (
+    all_players_out['PerfScore'] / (all_players_out['Salary_M'] + 0.001)
+).round(1)
+all_players_out = all_players_out.sort_values(
+    ['ClusterLabel', 'PerfPerM'], ascending=[True, False]
+).drop(columns=['Salary'])
+all_players_out.to_csv('cluster_all_players.csv', index=False)
+
+# Excel: one sheet per cluster
+with pd.ExcelWriter('cluster_all_players.xlsx', engine='openpyxl') as writer:
+    for label in ['Underpaid', 'Fair Value', 'Overpaid']:
+        sheet_df = all_players_out[all_players_out['ClusterLabel'] == label].copy()
+        sheet_df.to_excel(writer, sheet_name=label, index=False)
+
 print("\n" + "="*65)
+print("Full cluster tables saved:")
+print("  cluster_all_players.csv  — all players, flat file")
+print("  cluster_all_players.xlsx — one sheet per cluster")
 print("Charts saved: heatmap_correlations.png, kmeans_initial.png,")
 print("              elbow_silhouette.png, kmeans_final.png")
 print("="*65)
-
-# %%
